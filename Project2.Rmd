@@ -1,0 +1,221 @@
+---
+title: "Project2"
+author: "Sarah Wright"
+date: "2/24/2022"
+output: html_document
+---
+# Introduction 
+The U.S. Constitution requires that a census be conducted every ten years in order to allocate congressional representatives. While the Constitution only requires an “actual enumeration” of citizens, the census has expanded to include a number of demographic questions. The U.S. Census Bureau is still compiling the data from the 2020 census. As described by the Census Bureau, the results of the 2020 census will,
+
+*“...determine congressional representation, inform hundreds of billions in federal funding, and provide data that will impact communities for the next decade.”*
+
+In this project, you will use census data to predict whether or not someone has an annual income of more than $50,000. The data for making your predictions are contained in two files. The file “census_train.csv” contains 35,000 rows representing unique individuals, and 15 columns, representing demographic information about those individuals (including whether their income is above or below $50,000). The file “census_test.csv” contains 13,840 rows, but only 14 columns since the “income” column has been removed. A complete description of the variables in the data set is contained on the next page.
+
+There are two deliverables for this project. The first is a short technical paper (not to exceed 1000 words) describing your modeling process. This should be a formal submission paper; there should be no typos, each graph or figure should have titles and axes, etc. The second is a “.csv” file containing a vector of your predictions for whether the individuals in the test set make more than $50,000. That is, you will create a length 13,480 vector of 0’s and 1’s and write them to a file with:
+**write.csv(prediction_vector, "my_predictions.csv", row.names = FALSE)**
+
+# Grading 
+Your project will be evaluated for predictive quality (accuracy), writing quality, and mathematical clarity. Not all columns in this data set contain numerical values, so some will need to be translated into appropriate forms before beginning data analysis. There are also instances of missing or incomplete data, and some issues with how the data have been entered that you will need to address. You may wish to start by consulting the labs we have done in class and the textbook. You are also welcome to use any other techniques or packages you would like, but make sure that you can explain your analysis well.
+
+# Description of Variables:
+* age: continuous.
+
+* workclass: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay,         Never-worked.
+
+* fnlwgt: continuous. A weight that represents how common people with these exact age and racial demographics are in the United States.
+
+* education: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool.
+
+* education-num: continuous. Numerical representation of education level.
+
+* marital-status: Married-civ-spouse, Divorced, Never-married, Separated, Widowed, Married-spouse-absent, Married-AF-spouse. (“civ” and “AF” represent “civilian” (not in military) or “Armed Forces” (in military)).
+
+* occupation: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof- specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces.
+
+* relationship: Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
+
+*race: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black.
+
+*sex: Female, Male.
+
+*capital-gain: continuous. (Income from the sale of a capital asset, e.g., stocks or property)
+
+*capital-loss: continuous. (A loss occurred when a capital asset, e.g., stocks or property, decreases in value.)
+
+*hours-per-week: continuous. Number of hours worked per week.
+ 
+*native-country: United-States, Cambodia, England, Puerto-Rico, Canada, Germany, Outlying-US (Guam-USVI-etc), India, Japan, Greece, South, China, Cuba, Iran, Honduras, Philippines, Italy, Poland, Jamaica, Vietnam, Mexico, Portugal, Ireland, France, Dominican-Republic, Laos, Ecuador, Taiwan, Haiti, Columbia, Hungary, Guatemala, Nicaragua, Scotland, Thailand, Yugoslavia, El-Salvador, Trinadad&Tobago, Peru, Hong, Holland-Netherlands.
+
+*income: whether or not annual income from all sources is above or below $50,000
+
+## Reading in Data 
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+library(mosaic)
+library(dplyr)
+library(tidyverse)
+library(class)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(Stat2Data)
+
+
+test <- read.csv("/Users/sewii/Documents/CLASSES_Spring2022/Data325_AppliedDataScience/census_test.csv")
+test <- test[,-1]
+
+train <- read.csv("/Users/sewii/Documents/CLASSES_Spring2022/Data325_AppliedDataScience/census_train.csv")
+train <- train[,-1]
+
+head(test, 30)
+head(train, 30)
+```
+
+
+```{r echo=TRUE}
+#0 Is " <=50K.", 1 is 
+Income <- ifelse(train$income == " <=50K." | train$income == " <=50K",  0, 1)
+train[,15] <- Income
+
+##______________________________
+workclass2 <- ifelse(train$workclass == " ?", "other", train$workclass)
+train[,2] <- workclass2
+workclass2 <- ifelse(test$workclass == " ?", "other", test$workclass)
+test[,2]  <- workclass2
+
+workclass3 <- ifelse(train$workclass %in% c(" Federal-gov"," Local-gov", " State-gov" ),  "goverment_work", train$workclass)
+train[,2] <- workclass3
+workclass3 <- ifelse(test$workclass %in% c(" Federal-gov"," Local-gov", " State-gov" ),  "goverment_work", test$workclass)
+test[,2] <- workclass3
+##______________________________
+education1 <- ifelse(train$education %in% c(" 10th", " 11th", " 12th", " 1st-4th", " 5th-6th", " 7th-8th", " 9th", " HS-grad", " Preschool"), "no_college", ifelse(train$education %in% c(" Assoc-acdm", " Assoc-voc", " Bachelors", " Some-college"), "some_college", ifelse(train$education %in% c( " Masters", " Prof-school" ), "grad", train$education))) 
+train[,4] <- education1
+education1 <- ifelse(test$education %in% c(" 10th", " 11th", " 12th", " 1st-4th", " 5th-6th", " 7th-8th", " 9th", " HS-grad", " Preschool"), "no_college", ifelse(test$education %in% c(" Assoc-acdm", " Assoc-voc", " Bachelors", " Some-college"), "some_college", ifelse(test$education %in% c( " Masters", " Prof-school" ), "grad", test$education))) 
+test[,4] <- education1
+##______________________________
+marry = ifelse(train$marital.status %in% c(" Married-civ-spouse", " Married-spouse-absent" , " Married-AF-spouse"), " Married", ifelse(train$marital.status %in% c(" Widowed" , " Divorced" , " Separated") , " others",train$marital.status ))
+train[, 6] = marry
+marry = ifelse(test$marital.status %in% c(" Married-civ-spouse", " Married-spouse-absent" , " Married-AF-spouse"), " Married", ifelse(test$marital.status %in% c(" Widowed" , " Divorced" , " Separated") , " others",test$marital.status ))
+test[,6] = marry
+##______________________________
+country <- ifelse(train$native.country %in% c(" Vietnam", " India", " Japan", " Thailand", " China", " Taiwan", " Iran", " Philippines", " Cambodia" ," Laos", " Hong" ), "Asia", ifelse(train$native.country %in% c(" Italy", " France", " Germany", " Poland", " Ireland", " England", " Greece" , " Holand-Netherlands" , " Scotland" ," Yugoslavia"," Portugal", " Hungary" ), "Europe", ifelse(train$native.country %in% c( " Ecuador" , " Outlying-US(Guam-USVI-etc)"), "Australia", ifelse(train$native.country %in% c(" Peru" , " Trinadad&Tobago" , " Columbia" ), "South America", ifelse(train$native.country %in% c(" Guatemala" , " United-States" , " Mexico" , " Canada" , " Puerto-Rico" , " El-Salvador" , " Jamaica", " Cuba" ," Nicaragua" , " Honduras" , " Haiti", " Dominican-Republic" ), "North America", "unknown")))))
+train[,14] <- country
+country <- ifelse(test$native.country %in% c(" Vietnam", " India", " Japan", " Thailand", " China", " Taiwan", " Iran", " Philippines", " Cambodia" ," Laos", " Hong" ), "Asia", ifelse(test$native.country %in% c(" Italy", " France", " Germany", " Poland", " Ireland", " England", " Greece" , " Holand-Netherlands" , " Scotland" ," Yugoslavia"," Portugal", " Hungary" ), "Europe", ifelse(test$native.country %in% c( " Ecuador" , " Outlying-US(Guam-USVI-etc)"), "Australia", ifelse(test$native.country %in% c(" Peru" , " Trinadad&Tobago" , " Columbia" ), "South America", ifelse(test$native.country %in% c(" Guatemala" , " United-States" , " Mexico" , " Canada" , " Puerto-Rico" , " El-Salvador" , " Jamaica", " Cuba" ," Nicaragua" , " Honduras" , " Haiti", " Dominican-Republic" ), "North America", "unknown")))))
+test[,14] <- country
+##______________________________
+relationship <- ifelse(train$relationship %in% c(" Husband" , " Wife") , " married", train$relationship)
+train[,8] <- relationship
+relationship <- ifelse(test$relationship %in% c(" Husband" , " Wife") , " married", test$relationship)
+test[,8] <- relationship
+
+head(test, 10)
+head(train, 30)
+
+
+#############################################################
+
+#To predict income below $50,000 I believe that the most significant predictor will be age, education, marital status, and race, 
+
+```
+
+
+```{r}
+
+```
+
+
+
+```{r}
+#xtabs(~income + age, data = train)
+xtabs(~income + workclass, data = train)
+xtabs(~income + education, data = train)
+xtabs(~income + marital.status , data = train)
+xtabs(~income + occupation, data = train)
+xtabs(~income + relationship, data = train)
+xtabs(~income + race, data = train)
+xtabs(~income + sex, data = train)
+#xtabs(~income + capital.gain, data = train)
+#xtabs(~income + capital.loss, data = train)
+#xtabs(~income + hours.per.week, data = train)
+#xtabs(~income + native.country, data = train)
+unique(train$occupation)
+
+```
+
+```{r}
+ library(randomForest)
+```
+
+
+
+```{r pressure, echo=FALSE}
+
+rf_model <- randomForest(as.factor(income) ~ .,
+                          data =  train   , # your training data
+                          mtry =  5   , # number of factors
+                          ntree = 250   , # number of trees
+                          importance = TRUE,
+                          type = "class")
+rf_model
+
+varImpPlot(rf_model)
+```
+
+```{r}
+Titanic_train <- train
+Titanic_test <- test 
+
+class_tree <- rpart(as.factor(income)~., data = train)
+classTreePrediction <- predict(class_tree, newdata = test, type = "class")
+
+income <- classTreePrediction
+Titanic_test2<- cbind( Titanic_test, income)
+Titanic_test2
+
+Titanic <- rbind(Titanic_train, Titanic_test2)
+#Titanic <- train
+
+acc <- rep(0, 50)
+for (i in 1:50){
+  index <- sample(1:dim(Titanic)[1], replace = FALSE, .6*dim(Titanic)[1] )
+  t1 <- Titanic[ index, ]
+  t2 <- Titanic[-index, ]
+
+   #My  your code here
+  class_tree <- rpart(as.factor(income)~., data = t1)
+  classTreePrediction <- predict(class_tree, newdata = t2, type = "class")
+  table1 <- table( t2$income, classTreePrediction)
+  acc[i] <- sum(diag(table1))/sum(table1) # divide the accuracy by the total 
+
+}
+
+acc
+newtest <- Titanic_test2
+```
+```{r}
+
+newtest
+hist(acc)
+
+```
+```{r}
+library(caret)
+set.seed(3)
+tuned_model <- train(x = Titanic_train[ , 1:14], y = as.factor(Titanic_train$income)
+                     , tuneGrid = data.frame(mtry = 14) # must be between 1 : variables 
+                     , ntree = 250 # number of trees (passed to random forest)
+                     , method = "rf")
+
+tuned_model
+
+
+```
+
+
+```{r}
+write.csv(classTreePrediction, "my_predictions.csv", row.names = FALSE)
+
+```
+
